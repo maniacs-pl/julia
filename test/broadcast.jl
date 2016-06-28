@@ -3,7 +3,6 @@
 module TestBroadcastInternals
 
 using Base.Broadcast: broadcast_shape, check_broadcast_shape, newindex, _bcs, _bcsm
-using Base.Test
 
 @test @inferred(_bcs((), (3,5), (3,5))) == (3,5)
 @test @inferred(_bcs((), (3,1), (3,5))) == (3,5)
