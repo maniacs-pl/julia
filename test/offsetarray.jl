@@ -1,6 +1,5 @@
 # This file is a part of Julia. License is MIT: http://julialang.org/license
 
-@testset "offsetarrays" begin
 # OffsetArrays (arrays with indexing that doesn't start at 1)
 
 # This test file is designed to exercise support for generic indexing,
@@ -359,4 +358,3 @@ v = OffsetArray(rand(8), (-2,))
 @test A+A == OffsetArray(parent(A)+parent(A), A.offsets)
 @test A.*A == OffsetArray(parent(A).*parent(A), A.offsets)
 
-end

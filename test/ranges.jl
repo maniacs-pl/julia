@@ -1,6 +1,5 @@
 # This file is a part of Julia. License is MIT: http://julialang.org/license
 
-@testset "ranges" begin
 @test size(10:1:0) == (0,)
 @test length(1:.2:2) == 6
 @test length(1.:.2:2.) == 6
@@ -735,5 +734,4 @@ let r = 1:3, a = [1,2,3]
     @test convert(Array{Float64}, r) == a
     @test convert(Array{Int,1}, r) == a
     @test convert(Array{Float64,1}, r) == a
-end
 end

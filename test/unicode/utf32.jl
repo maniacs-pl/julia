@@ -1,6 +1,5 @@
 # This file is a part of Julia. License is MIT: http://julialang.org/license
 
-@testset "UTF32" begin
 u8 = "\U10ffff\U1d565\U1d7f6\U00066\U2008a"
 u32 = utf32(u8)
 @test sizeof(u32) == 20
@@ -257,4 +256,3 @@ end
 
 @test isvalid(Char['f','o','o','b','a','r'])
 
-end

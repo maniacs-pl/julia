@@ -1,6 +1,5 @@
 # This file is a part of Julia. License is MIT: http://julialang.org/license
 
-@testset "types" begin
 ## SubString, RevString, RepString and Cstring tests ##
 
 ## SubString tests ##
@@ -237,4 +236,3 @@ nullstr = Cstring(C_NULL)
 @test cstring != C_NULL
 @test C_NULL != cstring
 
-end
