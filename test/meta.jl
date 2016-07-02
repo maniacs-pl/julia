@@ -1,7 +1,5 @@
 # This file is a part of Julia. License is MIT: http://julialang.org/license
 
-module MetaTest
-
 function f(x)
     y = x+5
     z = y*y
@@ -96,13 +94,7 @@ for m in [:foo1, :foo2, :foo3, :foo4, :foo5]
 end
 @test Base.findmeta(multi_meta.args)[1] == 0
 
-end
-
-
 # tests to fully cover functions in base/meta.jl
-module MetaJLtest
-
-using Base.Meta
 
 @test isexpr(:(1+1),Set([:call]))
 @test isexpr(:(1+1),Vector([:call]))
@@ -113,4 +105,3 @@ show_sexpr(ioB,:(1+1))
 
 show_sexpr(ioB,QuoteNode(1),1)
 
-end
