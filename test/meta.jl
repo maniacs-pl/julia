@@ -95,7 +95,8 @@ end
 @test Base.findmeta(multi_meta.args)[1] == 0
 
 # tests to fully cover functions in base/meta.jl
-
+import Base.Meta.isexpr
+import Base.Meta.show_sexpr
 @test isexpr(:(1+1),Set([:call]))
 @test isexpr(:(1+1),Vector([:call]))
 @test isexpr(1,:call)==false
