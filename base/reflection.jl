@@ -194,13 +194,17 @@ end
 
 tt_cons(t::ANY, tup::ANY) = (@_pure_meta; Tuple{t, (isa(tup, Type) ? tup.parameters : tup)...})
 
-code_lowered(f, t::ANY=Tuple) = map(m -> (m::Method).lambda_template, methods(f, t))
+code_lowered(f, t::ANY=Tuple; ctx=Void) = map(m -> (m::Method).lambda_template, methods(f, t, ctx=ctx))
 
 # low-level method lookup functions used by the compiler
 
-function _methods(f::ANY,t::ANY,lim)
+function _methods(f::ANY,t::ANY,lim;ctx=Void)
     ft = isa(f,Type) ? Type{f} : typeof(f)
-    tt = isa(t,Type) ? Tuple{ft, t.parameters...} : Tuple{ft, t...}
+    tt = to_tuple_type(t)
+    if ctx !== Bottom
+        tt = tt_cons(ctx, tt)
+    end
+    tt = tt_cons(ft, tt)
     return _methods_by_ftype(tt, lim)
 end
 function _methods_by_ftype(t::ANY, lim)
@@ -262,26 +266,31 @@ function MethodList(mt::MethodTable)
     MethodList(ms, mt)
 end
 
-function methods(f::ANY, t::ANY)
+function methods(f::ANY, t::ANY; ctx=Void)
     if isa(f, Core.Builtin)
         throw(ArgumentError("argument is not a generic function"))
     end
     t = to_tuple_type(t)
-    return MethodList(Method[m[3] for m in _methods(f,t,-1)], typeof(f).name.mt)
+    return MethodList(Method[m[3] for m in _methods(f,t,-1,ctx=ctx)], typeof(f).name.mt)
 end
 
-methods(f::Core.Builtin) = MethodList(Method[], typeof(f).name.mt)
+# TODO: ctx?
+methods(f::Core.Builtin; ctx=Void) = MethodList(Method[], typeof(f).name.mt)
 
-function methods_including_ambiguous(f::ANY, t::ANY)
+function methods_including_ambiguous(f::ANY, t::ANY; ctx=Void)
     ft = isa(f,Type) ? Type{f} : typeof(f)
-    tt = isa(t,Type) ? Tuple{ft, t.parameters...} : Tuple{ft, t...}
+    tt = to_tuple_type(t)
+    if ctx !== Bottom
+        tt = tt_cons(ctx, tt)
+    end
+    tt = tt_cons(ft, tt)
     ms = ccall(:jl_matching_methods, Any, (Any,Cint,Cint), tt, -1, 1)::Array{Any,1}
     return MethodList(Method[m[3] for m in ms], typeof(f).name.mt)
 end
 
-function methods(f::ANY)
+function methods(f::ANY; ctx=Void)
     # return all matches
-    return methods(f, Tuple{Vararg{Any}})
+    return methods(f, Tuple{Vararg{Any}}, ctx=ctx)
 end
 
 function visit(f, mt::MethodTable)
@@ -327,9 +336,13 @@ uncompressed_ast(l::LambdaInfo) =
     isa(l.code,Array{UInt8,1}) ? ccall(:jl_uncompress_ast, Array{Any,1}, (Any,Any), l, l.code) : l.code
 
 # Printing code representations in IR and assembly
-function _dump_function(f, t::ANY, native, wrapper, strip_ir_metadata, dump_module)
+function _dump_function(f, t::ANY, native, wrapper, strip_ir_metadata, dump_module, ctx)
     ccall(:jl_is_in_pure_context, Bool, ()) && error("native reflection cannot be used from generated functions")
-    t = tt_cons(Core.Typeof(f), to_tuple_type(t))
+    t = to_tuple_type(t)
+    if ctx !== Bottom
+        t = tt_cons(ctx, t)
+    end
+    t = tt_cons(Core.Typeof(f), t)
     llvmf = ccall(:jl_get_llvmf, Ptr{Void}, (Any, Bool, Bool), t, wrapper, native)
 
     if llvmf == C_NULL
@@ -347,14 +360,14 @@ function _dump_function(f, t::ANY, native, wrapper, strip_ir_metadata, dump_modu
     return str
 end
 
-code_llvm(io::IO, f::ANY, types::ANY=Tuple, strip_ir_metadata=true, dump_module=false) =
-    print(io, _dump_function(f, types, false, false, strip_ir_metadata, dump_module))
+code_llvm(io::IO, f::ANY, types::ANY=Tuple, strip_ir_metadata=true, dump_module=false, ctx=Void) =
+    print(io, _dump_function(f, types, false, false, strip_ir_metadata, dump_module, ctx))
 code_llvm(f::ANY, types::ANY=Tuple) = code_llvm(STDOUT, f, types)
 code_llvm_raw(f::ANY, types::ANY=Tuple) = code_llvm(STDOUT, f, types, false)
 
-code_native(io::IO, f::ANY, types::ANY=Tuple) =
-    print(io, _dump_function(f, types, true, false, false, false))
-code_native(f::ANY, types::ANY=Tuple) = code_native(STDOUT, f, types)
+code_native(io::IO, f::ANY, types::ANY=Tuple, ctx=Void) =
+    print(io, _dump_function(f, types, true, false, false, false, ctx))
+code_native(f::ANY, types::ANY=Tuple, ctx=Void) = code_native(STDOUT, f, types, ctx)
 
 # give a decent error message if we try to instantiate a staged function on non-leaf types
 function func_for_method_checked(m::Method, types)
@@ -365,11 +378,11 @@ function func_for_method_checked(m::Method, types)
     return m
 end
 
-function code_typed(f::ANY, types::ANY=Tuple; optimize=true)
+function code_typed(f::ANY, types::ANY=Tuple; optimize=true, ctx=Void)
     ccall(:jl_is_in_pure_context, Bool, ()) && error("code reflection cannot be used from generated functions")
     types = to_tuple_type(types)
     asts = []
-    for x in _methods(f,types,-1)
+    for x in _methods(f,types,-1,ctx=ctx)
         linfo = func_for_method_checked(x[3], types)
         if optimize
             (li, ty, inf) = Core.Inference.typeinf(linfo, x[1], x[2], true)
@@ -382,11 +395,11 @@ function code_typed(f::ANY, types::ANY=Tuple; optimize=true)
     asts
 end
 
-function return_types(f::ANY, types::ANY=Tuple)
+function return_types(f::ANY, types::ANY=Tuple; ctx=Void)
     ccall(:jl_is_in_pure_context, Bool, ()) && error("code reflection cannot be used from generated functions")
     types = to_tuple_type(types)
     rt = []
-    for x in _methods(f,types,-1)
+    for x in _methods(f,types,-1,ctx=ctx)
         linfo = func_for_method_checked(x[3], types)
         (_li, ty, inf) = Core.Inference.typeinf(linfo, x[1], x[2])
         inf || error("inference not successful") # Inference disabled
@@ -395,19 +408,23 @@ function return_types(f::ANY, types::ANY=Tuple)
     rt
 end
 
-function which(f::ANY, t::ANY)
+function which(f::ANY, t::ANY; ctx=Void)
     if isa(f, Core.Builtin)
         throw(ArgumentError("argument is not a generic function"))
     end
     t = to_tuple_type(t)
     if isleaftype(t)
-        ms = methods(f, t)
+        ms = methods(f, t, ctx=ctx)
         isempty(ms) && error("no method found for the specified argument types")
         length(ms)!=1 && error("no unique matching method for the specified argument types")
         return first(ms)
     else
         ft = isa(f,Type) ? Type{f} : typeof(f)
-        m = ccall(:jl_gf_invoke_lookup, Any, (Any,), Tuple{ft, t.parameters...})
+        if ctx !== Bottom
+            t = tt_cons(ctx, t)
+        end
+        t = tt_cons(ft, t)
+        m = ccall(:jl_gf_invoke_lookup, Any, (Any,), t)
         if m === nothing
             error("no method found for the specified argument types")
         end
@@ -433,7 +450,7 @@ function functionloc(m::Method)
     (find_source_file(string(m.file)), ln)
 end
 
-functionloc(f::ANY, types::ANY) = functionloc(which(f,types))
+functionloc(f::ANY, types::ANY; ctx=Void) = functionloc(which(f,types; ctx=ctx))
 
 function functionloc(f)
     mt = methods(f)
@@ -450,8 +467,8 @@ function functionloc(f)
     functionloc(first(mt))
 end
 
-function function_module(f, types::ANY)
-    m = methods(f, types)
+function function_module(f, types::ANY; ctx=Void)
+    m = methods(f, types, ctx=ctx)
     if isempty(m)
         error("no matching methods")
     end
@@ -459,8 +476,12 @@ function function_module(f, types::ANY)
 end
 
 function method_exists(f::ANY, t::ANY)
-    t = to_tuple_type(t)
-    t = Tuple{isa(f,Type) ? Type{f} : typeof(f), t.parameters...}
+    ft = isa(f,Type) ? Type{f} : typeof(f)
+    tt = to_tuple_type(tt)
+    if ctx !== Bottom
+        tt = tt_cons(ctx, tt)
+    end
+    tt = tt_cons(ft, tt)
     return ccall(:jl_method_exists, Cint, (Any, Any), typeof(f).name.mt, t) != 0
 end
 
