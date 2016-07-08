@@ -92,6 +92,16 @@ function choosetests(choices = [])
         prepend!(tests, sparsetests)
     end
 
+    bitarraytests = ["bitarray/misc", "bitarray/basic", "bitarray/linalg",
+                     "bitarray/operators", "bitarray/utils"]
+    if "bitarray" in skip_tests
+        filter!(x -> (x != "bitarray" && !(x in bitarraytests)), tests)
+    elseif "bitarray" in tests
+        # specifically selected case
+        filter!(x -> x != "bitarray", tests)
+        prepend!(tests, bitarraytests)
+    end
+
     datestests = ["dates/accessors", "dates/adjusters", "dates/query",
                   "dates/periods", "dates/ranges", "dates/types",
                   "dates/io", "dates/arithmetic", "dates/conversions"]
